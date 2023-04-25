@@ -1,57 +1,41 @@
 const express = require('express')
-const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-require('dotenv').config();
+const connect = require('./connect');
+const QuestionList = require('./models/question-list');
+const User = require('./models/users')
 const app = express()
 const port = 3000;
 
-
-// mongoose.connect(process.env.MONGO_URI , {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true
-// }).then(() => {
-//   console.log("Connected to database")
-// }).catch((err) => {
-//   console.error('Error connecting to database')
-// });
-
-const userSchema = new mongoose.Schema({
-  email : {
-    type: String,
-    required: true,
-    unique: true
-  },
-  password: {
-    type: String,
-    required: true
-  },
-});
-
-const User = mongoose.model('User', userSchema);
-
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
-
-const USERS = [];
-
-const QUESTIONS = [{
-    title: "Two states",
-    description: "Given an array , return the maximum of the array?",
-    testCases: [{
-        input: "[1,2,3,4,5]",
-        output: "5"
-    }]
-}];
+app.set('view engine', 'ejs');
 
 
 const SUBMISSION = [
 
 ]
 
-
 app.get('/', (req,res) => {
   res.sendFile(__dirname + '/index.html');
-})
+});
+
+app.post('/', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.create({ email, password });
+    console.log(`User created: ${user}`);
+    res.redirect('/questions');
+  } catch (err) {
+    if (err.code === 11000) {
+      console.log(`Duplicate key error: ${err}`);
+      res.redirect('/questions');
+    } else {
+      console.error(`Error creating user: ${err}`);
+      res.status(500).send('Error creating user');
+    }
+  }
+});
+
 
 
 app.post('/signup', async function(req, res) {
@@ -63,14 +47,19 @@ app.post('/signup', async function(req, res) {
 
   //Store email and password (as is for now) in the USERS array above (only if the user with the given email doesnt exist)
 
-  if(userExists) return res.status(409).send("User with this email already exists");
+  if(userExists){
+    // res.write("User with this email already exists");
+    return res.status(409).send("User with this email already exists").redirect("/questions");
+  } 
 
   const newUser = new User({email , password});
-  await newUser.save();
+  await newUser.save().then(() => {
+    res.redirect("/questions");
+  });
 
   // return back 200 status code to the client
 
-  return res.status(200).send("User is successfuly added");
+  return res.status(200).send("User is successfuly added")
 })
 
 app.post('/login', async function(req, res) {
@@ -93,15 +82,22 @@ app.post('/login', async function(req, res) {
   res.status(200).send({token});
 });
 
-app.get('/questions', function(req, res) {
 
   //return the user all the questions in the QUESTIONS array
-  // const questions = [];
-  // for(let i in QUESTIONS){
-  //   questions.push(QUESTIONS[i]);
-  // }
-  res.send(QUESTIONS);
-})
+  //My questions are stored in the database in the questions collection.
+  // How will I display those questions on this route.
+ // assuming your Question model is defined in the 'models' directory
+
+app.get('/questions', async function(req, res) {
+    try {
+      const questions = await QuestionList.find(); // retrieve all questions from the database
+      console.log(questions); // render the 'questions' view with the retrieved questions array
+      res.render('questions', {questions});
+    } catch (error) {
+      console.error(error);
+      res.status(500).send("Error retrieving questions from the database"); // handle any errors that occur
+    }
+});
 
 app.get("/submissions", function(req, res) {
   
